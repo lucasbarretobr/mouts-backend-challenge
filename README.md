@@ -1,77 +1,113 @@
-# Developer Evaluation Project
+# Ambev Developer Evaluation
 
-`READ CAREFULLY`
+API REST para gerenciamento de usuários e vendas, desenvolvida em .NET 8.
 
-## Use Case
-**You are a developer on the DeveloperStore team. Now we need to implement the API prototypes.**
+## Dependências
 
-As we work with `DDD`, to reference entities from other domains, we use the `External Identities` pattern with denormalization of entity descriptions.
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) com Docker Compose
+- Git
+- Opcional: Visual Studio 2022 ou superior, com a carga de trabalho **ASP.NET e desenvolvimento Web**
 
-Therefore, you will write an API (complete CRUD) that handles sales records. The API needs to be able to inform:
+O Docker Compose utiliza PostgreSQL, Kafka, Kafka UI, MongoDB e Redis. A API usa PostgreSQL como banco relacional principal e Kafka para mensageria.
 
-* Sale number
-* Date when the sale was made
-* Customer
-* Total sale amount
-* Branch where the sale was made
-* Products
-* Quantities
-* Unit prices
-* Discounts
-* Total amount for each item
-* Cancelled/Not Cancelled
+## Como executar localmente
 
-It's not mandatory, but it would be a differential to build code for publishing events of:
-* SaleCreated
-* SaleModified
-* SaleCancelled
-* ItemCancelled
+A forma mais simples é executar a infraestrutura e a API com Docker Compose:
 
-If you write the code, **it's not required** to actually publish to any Message Broker. You can log a message in the application log or however you find most convenient.
+1. Clone o repositório e entre na pasta do backend:
 
-### Business Rules
+   ```powershell
+   git clone https://github.com/lucasbarretobr/mouts-backend-challenge.git
+   cd mouts-backend-challenge\template\backend
+   ```
 
-* Purchases above 4 identical items have a 10% discount
-* Purchases between 10 and 20 identical items have a 20% discount
-* It's not possible to sell above 20 identical items
-* Purchases below 4 items cannot have a discount
+2. Inicie os serviços:
 
-These business rules define quantity-based discounting tiers and limitations:
+   ```powershell
+   docker compose up --build
+   ```
 
-1. Discount Tiers:
-   - 4+ items: 10% discount
-   - 10-20 items: 20% discount
+3. Acesse a documentação da API em <http://localhost:8080/swagger>.
+   O health check está em <http://localhost:8080/health> e a Kafka UI em <http://localhost:8082>.
 
-2. Restrictions:
-   - Maximum limit: 20 items per product
-   - No discounts allowed for quantities below 4 items
+4. Para parar os serviços, pressione `Ctrl+C` ou execute:
 
-## Overview
-This section provides a high-level overview of the project and the various skills and competencies it aims to assess for developer candidates. 
+   ```powershell
+   docker compose down
+   ```
 
-See [Overview](/.doc/overview.md)
+As migrações do Entity Framework Core são aplicadas automaticamente na inicialização da API. Para apagar também os dados persistidos e recriar os containers, use `docker compose down -v`.
 
-## Tech Stack
-This section lists the key technologies used in the project, including the backend, testing, frontend, and database components. 
+### Executar a API fora do Docker
 
-See [Tech Stack](/.doc/tech-stack.md)
+Com o Docker Desktop em execução, inicie o banco e execute a API:
 
-## Frameworks
-This section outlines the frameworks and libraries that are leveraged in the project to enhance development productivity and maintainability. 
+```powershell
+cd mouts-backend-challenge\template\backend
+docker compose up -d ambev.developerevaluation.database
+dotnet restore Ambev.DeveloperEvaluation.sln
+dotnet run --project src\Ambev.DeveloperEvaluation.WebApi\Ambev.DeveloperEvaluation.WebApi.csproj --launch-profile http
+```
 
-See [Frameworks](/.doc/frameworks.md)
+Nesse modo, a API fica disponível em <http://localhost:5119/swagger>. A configuração local aponta para o PostgreSQL na porta `5433`. Use `docker compose up -d` caso também sejam necessários Kafka, MongoDB ou Redis.
 
-<!-- 
-## API Structure
-This section includes links to the detailed documentation for the different API resources:
-- [API General](./docs/general-api.md)
-- [Products API](/.doc/products-api.md)
-- [Carts API](/.doc/carts-api.md)
-- [Users API](/.doc/users-api.md)
-- [Auth API](/.doc/auth-api.md)
--->
+## Testes
 
-## Project Structure
-This section describes the overall structure and organization of the project files and directories. 
+Para restaurar dependências, compilar e executar todos os testes:
 
-See [Project Structure](/.doc/project-structure.md)
+```powershell
+cd mouts-backend-challenge\template\backend
+dotnet test Ambev.DeveloperEvaluation.sln
+```
+
+Os testes estão organizados em `Unit`, `Functional` e `Integration`, dentro da pasta `template/backend/tests`.
+
+Para executar apenas os testes unitários:
+
+```powershell
+dotnet test tests\Ambev.DeveloperEvaluation.Unit\Ambev.DeveloperEvaluation.Unit.csproj
+```
+
+## Banco de dados
+
+O projeto utiliza **PostgreSQL 18**, acessado com Entity Framework Core e Npgsql. No Docker Compose, a aplicação usa `ambev.developerevaluation.database:5432`; a máquina local usa `localhost:5433`.
+
+| Item | Valor |
+|---|---|
+| Banco | `developer_evaluation` |
+| Usuário | `developer` |
+| Senha local | `ev@luAt10n` |
+
+A string de conexão pode ser substituída por `ConnectionStrings__DefaultConnection`. Não utilize as credenciais padrão em produção.
+
+## Autenticação
+
+A API utiliza tokens JWT (Bearer). Um usuário administrador local é criado pelas migrações:
+
+- E-mail: `admin@ambev.com`
+- Senha: `Admin@123`
+
+1. Faça login em `POST /api/Auth` pelo Swagger ou por uma ferramenta HTTP:
+
+   ```powershell
+   $body = @{ email = "admin@ambev.com"; password = "Admin@123" } | ConvertTo-Json
+   $response = Invoke-RestMethod -Method Post -Uri http://localhost:8080/api/Auth -ContentType "application/json" -Body $body
+   $token = $response.data.token
+   ```
+
+2. Envie o token nas rotas protegidas, como as rotas de vendas:
+
+   ```text
+   Authorization: Bearer <token>
+   ```
+
+No Swagger, clique em **Authorize** e informe `Bearer <token>`. A chave de assinatura está em `Jwt:SecretKey`; configure uma chave segura por `Jwt__SecretKey` fora do ambiente local.
+
+## Estrutura principal
+
+- `src/Ambev.DeveloperEvaluation.WebApi`: endpoints HTTP e Swagger;
+- `src/Ambev.DeveloperEvaluation.Application`: casos de uso;
+- `src/Ambev.DeveloperEvaluation.Domain`: entidades e regras de domínio;
+- `src/Ambev.DeveloperEvaluation.ORM`: persistência e migrações;
+- `tests`: testes unitários, funcionais e de integração.
