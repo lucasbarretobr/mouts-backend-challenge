@@ -1,52 +1,49 @@
-using System.Threading;
-using System.Threading.Tasks;
+using Ambev.DeveloperEvaluation.Application.Common.Results;
 using Ambev.DeveloperEvaluation.Common.Security;
 using Ambev.DeveloperEvaluation.Domain.Repositories;
 using Ambev.DeveloperEvaluation.Domain.Specifications;
 using MediatR;
 
-namespace Ambev.DeveloperEvaluation.Application.Auth.AuthenticateUser
+namespace Ambev.DeveloperEvaluation.Application.Auth.AuthenticateUser;
+
+public sealed class AuthenticateUserHandler : IRequestHandler<AuthenticateUserCommand, CommandResult<AuthenticateUserResult>>
 {
-    public class AuthenticateUserHandler : IRequestHandler<AuthenticateUserCommand, AuthenticateUserResult>
+    private readonly IUserRepository _users;
+    private readonly IPasswordHasher _hasher;
+    private readonly IJwtTokenGenerator _tokens;
+
+    public AuthenticateUserHandler(
+        IUserRepository users,
+        IPasswordHasher hasher,
+        IJwtTokenGenerator tokens)
     {
-        private readonly IUserRepository _userRepository;
-        private readonly IPasswordHasher _passwordHasher;
-        private readonly IJwtTokenGenerator _jwtTokenGenerator;
+        _users = users;
+        _hasher = hasher;
+        _tokens = tokens;
+    }
 
-        public AuthenticateUserHandler(
-            IUserRepository userRepository,
-            IPasswordHasher passwordHasher,
-            IJwtTokenGenerator jwtTokenGenerator)
+    public async Task<CommandResult<AuthenticateUserResult>> Handle(
+        AuthenticateUserCommand request,
+        CancellationToken cancellationToken)
+    {
+        var user = await _users.GetByEmailAsync(request.Email, cancellationToken);
+
+        if (user is null || !_hasher.VerifyPassword(request.Password, user.Password))
+            return CommandResultFactory.Unauthorized<AuthenticateUserResult>(
+                "auth.invalid_credentials",
+                "Invalid credentials.");
+
+        if (!new ActiveUserSpecification().IsSatisfiedBy(user))
+            return CommandResultFactory.Unauthorized<AuthenticateUserResult>(
+                "auth.inactive_user",
+                "User is not active.");
+
+        return CommandResultFactory.Success(new AuthenticateUserResult
         {
-            _userRepository = userRepository;
-            _passwordHasher = passwordHasher;
-            _jwtTokenGenerator = jwtTokenGenerator;
-        }
-
-        public async Task<AuthenticateUserResult> Handle(AuthenticateUserCommand request, CancellationToken cancellationToken)
-        {
-            var user = await _userRepository.GetByEmailAsync(request.Email, cancellationToken);
-            
-            if (user == null || !_passwordHasher.VerifyPassword(request.Password, user.Password))
-            {
-                throw new UnauthorizedAccessException("Invalid credentials");
-            }
-
-            var activeUserSpec = new ActiveUserSpecification();
-            if (!activeUserSpec.IsSatisfiedBy(user))
-            {
-                throw new UnauthorizedAccessException("User is not active");
-            }
-
-            var token = _jwtTokenGenerator.GenerateToken(user);
-
-            return new AuthenticateUserResult
-            {
-                Token = token,
-                Email = user.Email,
-                Name = user.Username,
-                Role = user.Role.ToString()
-            };
-        }
+            Token = _tokens.GenerateToken(user),
+            Email = user.Email,
+            Name = user.Username,
+            Role = user.Role.ToString()
+        });
     }
 }

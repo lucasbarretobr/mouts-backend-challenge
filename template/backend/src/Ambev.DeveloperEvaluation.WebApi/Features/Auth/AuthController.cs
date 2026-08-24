@@ -4,6 +4,7 @@ using AutoMapper;
 using Ambev.DeveloperEvaluation.WebApi.Common;
 using Ambev.DeveloperEvaluation.WebApi.Features.Auth.AuthenticateUserFeature;
 using Ambev.DeveloperEvaluation.Application.Auth.AuthenticateUser;
+using Ambev.DeveloperEvaluation.Application.Common.Results;
 
 namespace Ambev.DeveloperEvaluation.WebApi.Features.Auth;
 
@@ -48,12 +49,15 @@ public class AuthController : BaseController
 
         var command = _mapper.Map<AuthenticateUserCommand>(request);
         var response = await _mediator.Send(command, cancellationToken);
+        if (!response.IsSuccess) return FromResult(response);
 
         return Ok(new ApiResponseWithData<AuthenticateUserResponse>
         {
             Success = true,
             Message = "User authenticated successfully",
-            Data = _mapper.Map<AuthenticateUserResponse>(response)
+            Data = _mapper.Map<AuthenticateUserResponse>(response.Value)
         });
     }
 }
+
+

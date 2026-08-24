@@ -1,4 +1,6 @@
-﻿namespace Ambev.DeveloperEvaluation.WebApi.Features.Auth.AuthenticateUserFeature;
+﻿using System.ComponentModel;
+
+namespace Ambev.DeveloperEvaluation.WebApi.Features.Auth.AuthenticateUserFeature;
 
 /// <summary>
 /// Represents the authentication request model for user login.
@@ -9,11 +11,13 @@ public class AuthenticateUserRequest
     /// Gets or sets the user's email address for authentication.
     /// Must be a valid email format.
     /// </summary>
-    public string Email { get; set; } = string.Empty;
+    [DefaultValue("admin@ambev.com")]
+    public string Email { get; set; } = "admin@ambev.com";
 
     /// <summary>
     /// Gets or sets the user's password for authentication.
     /// Must match the stored password after hashing.
     /// </summary>
-    public string Password { get; set; } = string.Empty;
+    [DefaultValue("Admin@123")]
+    public string Password { get; set; } = "Admin@123";
 }

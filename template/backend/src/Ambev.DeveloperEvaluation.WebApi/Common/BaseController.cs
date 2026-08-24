@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
+using Ambev.DeveloperEvaluation.Application.Common.Results;
+using Ambev.DeveloperEvaluation.Common.Validation;
 using System.Security.Claims;
 
 namespace Ambev.DeveloperEvaluation.WebApi.Common;
@@ -12,6 +14,16 @@ public class BaseController : ControllerBase
 
     protected string GetCurrentUserEmail() =>
         User.FindFirst(ClaimTypes.Email)?.Value ?? throw new NullReferenceException();
+
+    protected IActionResult FromResult<T>(CommandResult<T> result)
+    {
+        if (result.IsSuccess)
+            return Ok(new ApiResponseWithData<T> { Success = true, Data = result.Value });
+
+        var statusCode = result.Errors.Any(error => error.Type == ErrorType.Unauthorized) ? StatusCodes.Status401Unauthorized : result.Errors.Any(error => error.Type == ErrorType.NotFound) ? StatusCodes.Status404NotFound : result.Errors.Any(error => error.Type == ErrorType.Conflict) ? StatusCodes.Status409Conflict : StatusCodes.Status400BadRequest;
+        var response = new ApiResponse { Success = false, Message = result.Errors.FirstOrDefault()?.Message ?? "Operation failed", Errors = result.Errors.Select(error => new ValidationErrorDetail { Error = error.Code, Detail = error.Message }) };
+        return StatusCode(statusCode, response);
+    }
 
     protected IActionResult Ok<T>(T data) =>
             base.Ok(new ApiResponseWithData<T> { Data = data, Success = true });
@@ -35,3 +47,5 @@ public class BaseController : ControllerBase
                 Success = true
             });
 }
+
+
